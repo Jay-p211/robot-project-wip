@@ -1,11 +1,12 @@
 from nav_msgs.msg import OccupancyGrid
 
 import numpy as np
-from typing import Tuple
+from typing import Optional, Tuple
+
 
 
 class MapConversions:
-    def __init__(self, boundary, resolution: float) -> None:
+    def __init__(self, resolution: float, width: int, height: int, x0: float, y0: float):
         """
         Create an object from parameters.
 
@@ -13,127 +14,81 @@ class MapConversions:
             boundary    edges of the environment in the order (xmin, ymin, xmax, ymax) [m]
             resolution  size of the cells in the occupancy grid [m]
         """
-        # Boundary of the envrionment in the format (xmin, ymin, xmax, ymax)
-        self.boundary = boundary
-        # Size of the cells in the occupancy grid
-        self.resolution = resolution
-        ##### YOUR CODE STARTS HERE ##### # noqa: E266
-        # TODO Create the array shape in the format (# rows, # columns)
-        self.array_shape = (0, 0)
-        ##### YOUR CODE ENDS HERE   ##### # noqa: E266
+        # cell size
+        self.s = resolution
+        # number of columns (width) and rows (height)
+        self.Nc = width
+        self.Nr = height
+        # lower-left origin
+        self.x0 = x0
+        self.y0 = y0
+        # precompute max bounds
+        self.xmax = x0 + self.Nc * self.s
+        self.ymax = y0 + self.Nr * self.s
 
     @classmethod
-    def from_msg(cls, msg: OccupancyGrid):
-        """Create an object from an OccupancyGrid ROS msg."""
-        ##### YOUR CODE STARTS HERE ##### # noqa: E266
-        # TODO Extract the boundary and cell resolution from the occupancy grid message
-        boundary = [0, 0, 1, 1]
-        resolution = 1.
-        ##### YOUR CODE ENDS HERE   ##### # noqa: E266
-        return cls(boundary, resolution)
+    def from_msg(cls, occ_msg):
+        # occ_msg: nav_msgs.msg.OccupancyGrid
+        res = occ_msg.info.resolution
+        width = occ_msg.info.width
+        height = occ_msg.info.height
+        x0 = occ_msg.info.origin.position.x
+        y0 = occ_msg.info.origin.position.y
+        return cls(res, width, height, x0, y0)
 
-    def sub2ind(self, rows: np.array, cols: np.array) -> np.array:
-        """
-        sub2ind coverts subscript (row, column) pairs into linear indices in row-major order.
+    def _in_bounds_xy(self, x: float, y: float) -> bool:
+        # Allow exact right/top boundary
+        return (self.x0 <= x <= self.xmax) and (self.y0 <= y <= self.ymax)
 
-        inputs:
-            rows    numpy array of row indices
-            cols    numpy array of column indices
-        outputs:
-            inds    numpy array of integer indices
-        Note: (row, column) pairs that are not valid should have a
-              corresponding output index of -1
-        """
-        ##### YOUR CODE STARTS HERE ##### # noqa: E266
-        # TODO Convert data in (row, col) format to ind format
-        inds = -np.ones_like(rows)
-        ##### YOUR CODE ENDS HERE   ##### # noqa: E266
-        return inds
+    def _in_bounds_sub(self, r: int, c: int) -> bool:
+        return 0 <= r < self.Nr and 0 <= c < self.Nc
 
-    def ind2sub(self, inds: np.array) -> Tuple[np.array, np.array]:
-        """
-        ind2sub converts linear indices in a row-major array to subscript (row, column) pairs.
+    def _in_bounds_ind(self, i: int) -> bool:
+        return 0 <= i < self.Nr * self.Nc
+    
+    def xy2sub(self, x: float, y: float) -> Optional[Tuple[int, int]]:
+        if not self._in_bounds_xy(x, y):
+            return None
+        # Adjust exact right/top boundaries to be in last cell
+        if x == self.xmax:
+            c = self.Nc - 1
+        else:
+            c = int((x - self.x0) // self.s)
+        if y == self.ymax:
+            r = self.Nr - 1
+        else:
+            r = int((y - self.y0) // self.s)
+        return (r, c) if self._in_bounds_sub(r, c) else None
 
-        inputs:
-            inds    numpy array of integer indices
-        outputs:
-            rows    numpy array of row indices
-            cols    numpy array of column indices
-        Note: any indices that are not valid should have row and column
-              subscripts outputs of -1
-        """
-        ##### YOUR CODE STARTS HERE ##### # noqa: E266
-        # TODO Convert data in ind format to (row, col) format
-        rows = -np.ones_like(inds)
-        cols = -np.ones_like(inds)
-        ##### YOUR CODE ENDS HERE   ##### # noqa: E266
-        return rows, cols
-
-    def xy2sub(self, x: np.array, y: np.array) -> Tuple[np.array, np.array]:
-        """
-        xy2sub converts (x,y) coordinate pairs into (row, column) subscript pairs.
-
-        inputs:
-            x       numpy array of x values
-            y       numpy array of y values
-        outputs:
-            rows    numpy array of row indices
-            cols    numpy array of column indices
-        Note: any (x,y) pairs that are not valid should have subscript
-              outputs of -1
-        """
-        ##### YOUR CODE STARTS HERE ##### # noqa: E266
-        # TODO Convert data in (x, y) format to (row, col) format
-        rows = -np.ones_like(x)
-        cols = -np.ones_like(y)
-        ##### YOUR CODE ENDS HERE   ##### # noqa: E266
-        return rows, cols
-
-    def sub2xy(self, rows: np.array, cols: np.array) -> Tuple[np.array, np.array]:
-        """
-        sub2xy converts (row, column) subscript pairs into (x,y) coordinate pairs.
-
-        inputs:
-            rows        numpy array of row indices
-            cols        numpy array of column indices
-        outputs:
-            x       numpy array of x coordinates of center of each cell
-            y       numpy array of y coordinates of center of each cell
-        Note: any (row, col) pairs that are not valid should have outputs
-              of numpy NaN
-        """
-        ##### YOUR CODE STARTS HERE ##### # noqa: E266
-        # TODO Convert data in (row, col) format to (x, y) format
-        x = np.nan * np.ones_like(rows)
-        y = np.nan * np.ones_like(cols)
-        ##### YOUR CODE ENDS HERE   ##### # noqa: E266
-        return x, y
-
-    def xy2ind(self, x: np.array, y: np.array) -> np.array:
-        """
-        xy2ind converts (x,y) coordinate pairs into linear indices in row-major order.
-
-        inputs:
-            x           numpy array of x values
-            y           numpy array of y values
-        outputs:
-            numpy array of row indices
-            numpy array of column indices
-        """
-        rows, cols = self.xy2sub(x, y)
-        ind = self.sub2ind(rows, cols)
-        return ind
-
-    def ind2xy(self, inds: np.array) -> Tuple[np.array, np.array]:
-        """
-        ind2xy converts linear indices in row-major order into (x,y) coordinate pairs.
-
-        inputs:
-            inds        numpy array of indices
-        outputs:
-            numpy array of x coordinates
-            numpy array of y coordinates
-        """
-        rows, cols = self.ind2sub(inds)
-        x, y = self.sub2xy(rows, cols)
+    def sub2xy(self, r: int, c: int) -> Optional[Tuple[float, float]]:
+        if not self._in_bounds_sub(r, c):
+            return None
+        x = self.x0 + self.s * (c + 0.5)
+        y = self.y0 + self.s * (r + 0.5)
         return (x, y)
+    
+    def ind2sub(self, i: int) -> Optional[Tuple[int, int]]:
+        if not self._in_bounds_ind(i):
+            return None
+        r = i // self.Nc
+        c = i % self.Nc
+        return (r, c)
+
+    def sub2ind(self, r: int, c: int) -> Optional[int]:
+        if not self._in_bounds_sub(r, c):
+            return None
+        return r * self.Nc + c
+
+    def xy2ind(self, x: float, y: float) -> Optional[int]:
+        sub = self.xy2sub(x, y)
+        if sub is None:
+            return None
+        return self.sub2ind(*sub)
+
+    def ind2xy(self, i: int) -> Optional[Tuple[float, float]]:
+        sub = self.ind2sub(i)
+        if sub is None:
+            return None
+        return self.sub2xy(*sub)
+
+
